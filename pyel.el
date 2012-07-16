@@ -144,30 +144,30 @@ modifications to the buffer."
 ;; I am not going follow Steve's strategy of using int's, since
 ;; symbols should be fine.
 
-;; `pyel-ERROR'          ; on error
-;; `pyel-EOF'            ; end of file
-;; `pyel-EOL'            ; end of line
-;; `pyel-COMMENT'        ; comment
-;; `pyel-OR'             ; or
-;; `pyel-AND'            ; and
-;; `pyel-NOT'            ; not
-;; `pyel-IS'             ; is
-;; `pyel-ISNOT'          ; is not
-;; `pyel-EQ'             ; equal
-;; `pyel-NEQ'            ; not equal
-;; `pyel-LT'             ; less than
-;; `pyel-LE'             ; less than or equal to
-;; `pyel-GT'             ; greater than
-;; `pyel-GE'             ; greater than or equal to
-;; `pyel-TRUE'           ; true
-;; `pyel-FALSE'          ; false
-;; `pyel-NONE'           ; none
-;; `pyel-NOTIMPLEMENTED  ; not implemented
-;; `pyel-ELLIPSIS'       ; ellipsis
-;; `pyel-RETURN'         ; return keyword
-;; `pyel-BLOCK'          ; statement block
-;; `pyel-FUNCTION'       ; function keyword
-;; `pyel-DEBUG'          ; the debug const, assignment is an error
+;; `ERROR'          ; on error
+;; `EOF'            ; end of file
+;; `EOL'            ; end of line
+;; `COMMENT'        ; comment
+;; `OR'             ; or
+;; `AND'            ; and
+;; `NOT'            ; not
+;; `IS'             ; is
+;; `ISNOT'          ; is not
+;; `EQ'             ; equal
+;; `NEQ'            ; not equal
+;; `LT'             ; less than
+;; `LE'             ; less than or equal to
+;; `GT'             ; greater than
+;; `GE'             ; greater than or equal to
+;; `TRUE'           ; true
+;; `FALSE'          ; false
+;; `NONE'           ; none
+;; `NOTIMPLEMENTED'  ; not implemented
+;; `ELLIPSIS'       ; ellipsis
+;; `RETURN'         ; return keyword
+;; `BLOCK'          ; statement block
+;; `FUNCTION'       ; function keyword
+;; `DEBUG'          ; the debug const, assignment is an error
 
 
 (defconst pyel-tokens
@@ -175,11 +175,10 @@ modifications to the buffer."
 
 (defconst pyel-token-names
   (let ((table (make-hash-table :test 'equal)))
-    (loop for k in pyel-keywords
+    (loop for k in pyel-tokens
           do (puthash
-              (symbol-name k)                            ; instanceof
-              (intern (concat "pyel-"
-                              (upcase (symbol-name k)))) ; pyel-INSTANCEOF
+              (symbol-name k)           ; "None"
+              k                         ; (quote None)
               table))
     table)
   "Python keywords by name, mapped to their symbols.")
@@ -191,9 +190,8 @@ modifications to the buffer."
   (let ((table (make-hash-table :test 'equal)))
     (loop for k in pyel-assignments
           do (puthash
-              (symbol-name k)                            ; instanceof
-              (intern (concat "pyel-"
-                              (upcase (symbol-name k)))) ; pyel-INSTANCEOF
+              (symbol-name k)           ; "="
+              k                         ; (quote =)
               table))
     table)
   "Python assignment operators by name, mapped to their symbols.")
@@ -257,7 +255,7 @@ Current scan position.")
 (defstruct (pyel-lexer
             (:constructor nil)
             (:constructor make-pyel-lexer (&key string
-                                                tab-width
+                                                (tab-width 4)
                                                 (curr-line 1)
                                                 indent-stack
                                                 decorators)))
@@ -280,9 +278,8 @@ Current scan position.")
 
 (defsubst pyel-node-add-children (parent &rest nodes)
   "Set parent node of NODES to PARENT, and return PARENT.
-Does nothing if we're not recording parent links.
-If any given node in NODES is nil, doesn't record that link."
-  (pyel-fixup-starts parent nodes)
+Does nothing if we're not recording parent links.  If any given
+node in NODES is nil, doesn't record that link."
   (dolist (node nodes)
     (and node
          (setf (pyel-node-parent node) parent))))
@@ -337,7 +334,7 @@ If any given node in NODES is nil, doesn't record that link."
 (defstruct (pyel-error-node
             (:include pyel-node)
             (:constructor nil)         ; silence emacs21 byte-compiler
-            (:constructor make-pyel-error-node (&key (type 'pyel-ERROR)
+            (:constructor make-pyel-error-node (&key (type 'ERROR)
                                                      (pos pyel-token-beg)
                                                      len)))
   "AST node representing a parse error.")
@@ -346,7 +343,7 @@ If any given node in NODES is nil, doesn't record that link."
 (defstruct (pyel-script-node
             (:include pyel-scope)
             (:constructor nil)
-            (:constructor make-pyel-script-node (&key (type 'pyel-SCRIPT)
+            (:constructor make-pyel-script-node (&key (type 'SCRIPT)
                                                       (pos pyel-token-beg)
                                                       len
                                                       var-decls
@@ -362,7 +359,7 @@ If any given node in NODES is nil, doesn't record that link."
 (defstruct (pyel-ast-root
             (:include pyel-script-node)
             (:constructor nil)
-            (:constructor make-pyel-ast-root (&key (type 'pyel-SCRIPT)
+            (:constructor make-pyel-ast-root (&key (type 'SCRIPT)
                                                    (pos pyel-token-beg)
                                                    len
                                                    buffer)))
@@ -373,10 +370,21 @@ If any given node in NODES is nil, doesn't record that link."
   warnings        ; a lisp list of warnings found during parsing
   node-count)     ; number of nodes in the tree, including the root
 
+(defstruct (pyel-expr-stmt-node
+            (:include pyel-node)
+            (:constructor nil)
+            (:constructor make-pyel-expr-stmt-node (&key (type EXPR_VOID)
+                                                         (pos pyel-ts-cursor)
+                                                         len
+                                                         expr)))
+  "An expression statement."
+  expr)
+
+
 (defstruct (pyel-var-decl-node
             (:include pyel-node)
             (:constructor nil)
-            (:constructor make-pyel-var-decl-node (&key (type pyel-VAR)
+            (:constructor make-pyel-var-decl-node (&key (type VAR)
                                                        (pos pyel-token-beg)
                                                        len
                                                        kids
@@ -392,22 +400,46 @@ declarations, the node begins at the position of the first child."
             (:include pyel-node)
             (:constructor nil)
             (:constructor make-pyel-infix-node (&key type
-                                                    (pos pyel-ts-cursor)
-                                                    len
-                                                    op-pos
-                                                    left
-                                                    right)))
+                                                     len
+                                                     op-pos
+                                                     left
+                                                     right)))
   "Represents infix expressions.
 Includes assignment ops like `|=', and the comma operator.
 The type field inherited from `pyel-node' holds the operator."
-  op-pos    ; buffer position where operator begins
-  left      ; any `pyel-node'
-  right)    ; any `pyel-node'
+  op-pos                       ; buffer position where operator begins
+  left                         ; any `pyel-node'
+  right)                       ; any `pyel-node'
+
+(defstruct (pyel-assign-node
+            (:include pyel-infix-node)
+            (:constructor nil)
+            (:constructor make-pyel-assign-node (&key type
+                                                     (pos pyel-ts-cursor)
+                                                     len
+                                                     op-pos
+                                                     left
+                                                     right)))
+  "Represents any assignment.
+The type field holds the actual assignment operator.")
+
+(defstruct (pyel-unary-node
+            (:include pyel-node)
+            (:constructor nil)
+            (:constructor make-pyel-unary-node (&key type ; required
+                                                    (pos pyel-ts-cursor)
+                                                    len
+                                                    operand)))
+  "AST node type for unary operator nodes.
+The type field can be NOT, BITNOT, POS, NEG, INC, DEC,
+TYPEOF, or DELPROP.  For INC or DEC, a 'postfix node
+property is added if the operator follows the operand."
+  operand)  ; a `pyel-node' expression
 
 (defstruct (pyel-function-node
             (:include pyel-script-node)
             (:constructor nil)
-            (:constructor make-pyel-function-node (&key (type pyel-FUNCTION)
+            (:constructor make-pyel-function-node (&key (type FUNCTION)
                                                        (pos pyel-ts-cursor)
                                                        len
                                                        (ftype 'FUNCTION)
@@ -533,9 +565,8 @@ Handles unicode and latin chars properly."
   (let ((table (make-hash-table :test 'equal)))
     (loop for k in pyel-keywords
           do (puthash
-              (symbol-name k)                            ; instanceof
-              (intern (concat "pyel-"
-                              (upcase (symbol-name k)))) ; pyel-INSTANCEOF
+              (symbol-name k)           ; "return"
+              k                         ; (quote return)
               table))
     table)
   "Python keywords by name, mapped to their symbols.")
@@ -550,7 +581,7 @@ Handles unicode and latin chars properly."
   (let ((table (make-hash-table :test 'equal)))
     (loop for k in pyel-reserved-words
           do
-          (puthash (symbol-name k) 'pyel-RESERVED table))
+          (puthash (symbol-name k) 'RESERVED table))
     table)
   "JavaScript reserved words by name, mapped to 'pyel-RESERVED.")
 
@@ -559,6 +590,7 @@ Handles unicode and latin chars properly."
 Returns a symbol such as 'pyel-BREAK, or nil if not keyword/reserved."
   (or (gethash s pyel-keyword-names)
       (gethash s pyel-reserved-word-names)))
+
 (defsubst pyel-block-node-push (n kid)
   "Push pyel-node KID onto the end of pyel-block-node N's child list.
 KID is always added to the -end- of the kids list.
@@ -571,78 +603,94 @@ Function also calls `pyel-node-add-children' to add the parent link."
 
 (defun pyel-get-token ()
   "Return next Python token, an int such as pyel-RETURN.
-Also return the start and end position of the token."
-  (let ((c (char-after (point))))
-    (catch 'return
-      (cond
-       ((eq c ?#)
-        ;; it's a comment
-        )
-       (t
-        (let ((token (catch 'break
-                       (let ((start-pos (point)))
-                         (while t
-                           (if (pyel-identifier-part-p (char-after (point)))
-                               (forward-char)
-                             (throw 'break (list :str (buffer-substring start-pos (point))
-                                                 :beg start-pos
-                                                 :end (point)))))))))
-          (awhen (pyel-string-to-keyword (plist-get token :str))
-            (when (eq it 'pyel-RESERVED)
-              (throw 'return (plist-put token :token (pyel-token-code it)))))
-          (throw 'return (plist-put token :token 'pyel-NAME))))))))
+Also return the start and end position of the token.
 
-(defun pyel-parse-expr ()
-  (let* ((pn (pyel-parse-assign-expr))
-         (pos (pyel-node-pos pn))
+The plist should be of the form:
+'(:token token :str string-value :beg begining-position
+      :end end-position)"
+  (flet ((bsnp (start end)
+               (buffer-substring-no-properties start end)))
+    (let ((c (char-after (point)))
+          (start-pos (point)))
+      (catch 'return
+        (cond
+         ((eq c ?#)
+          ;; it's a comment
+          )
+         ((eq c ?=)
+          (forward-char)
+          (list :token '=
+                :str (bsnp start-pos (point))
+                :beg start-pos
+                :end (point)))
+         (t
+          (let ((token (catch 'break
+                         (let ((start-pos (point)))
+                           (while t
+                             (if (pyel-identifier-part-p (char-after (point)))
+                                 (forward-char)
+                               (throw 'break (list :str (bsnp start-pos (point))
+                                                   :beg start-pos
+                                                   :end (point)))))))))
+            (awhen (pyel-string-to-keyword (plist-get token :str))
+              (when (eq it 'RESERVED)
+                (throw 'return (plist-put token :token (pyel-token-code it)))))
+            (throw 'return (plist-put token :token 'NAME)))))))))
+
+(defun pyel-parse-expr (left)
+  (let* ((pn (pyel-parse-assign-expr left))
+         pos
          left
          right
          op-pos)
-    (while (pyel-match-token 'pyel-COMMA)
-      (setq op-pos (- pyel-token-beg pos)) ; relative
-      (setq right (pyel-parse-assign-expr)
-            left pn
-            pn (make-pyel-infix-node :type 'pyel-COMMA
-                                     :pos pos
-                                     :len (- pyel-ts-cursor pos)
-                                     :op-pos op-pos
-                                     :left left
-                                     :right right))
-      (pyel-node-add-children pn left right))
+    (setq right (pyel-parse-assign-expr (pyel-peek-token))
+          left pn
+          pn (make-pyel-infix-node :type 'COMMA
+                                   :left left
+                                   :right right))
+    (pyel-node-add-children pn left right)
     pn))
 
-(defun pyel-parse-assign-expr ()
-  (let* ((token (pyel-peek-token))
-        (tt (plist-get token :token))
+(defun pyel-parse-cond-expr ()
+  (let ((pos pyel-token-beg)
+        (pn (pyel-parse-or-expr))
+        test-expr
+        if-true
+        if-false
+        q-pos
+        c-pos)
+    (when (pyel-match-token 'HOOK)
+      (setq q-pos (- pyel-token-beg pos)
+            if-true (pyel-parse-assign-expr))
+      (setq c-pos (- pyel-token-beg pos)
+            if-false (pyel-parse-assign-expr)
+            test-expr pn
+            pn (make-pyel-cond-node :pos pos
+                                   :test-expr test-expr
+                                   :true-expr if-true
+                                   :false-expr if-false
+                                   :q-pos q-pos
+                                   :c-pos c-pos))
+      (pyel-node-add-children pn test-expr if-true if-false))
+    pn))
+
+(defun pyel-parse-assign-expr (token)
+  (let* ((tt (plist-get token :token))
         (pos pyel-token-beg)
         pn
         left
         right
         op-pos)
-    (if (eq tt 'pyel-YIELD)
-        (pyel-parse-return-or-yield tt t)
-      ;; not yield - parse assignment expression
-      (setq pn (pyel-parse-cond-expr)
-            tt (pyel-peek-token))
-      (when (gethash tt pyel-assignment)
-        (pyel-consume-token)
-        (setq op-pos (- pyel-token-beg pos)  ; relative
-              left pn
-              right (pyel-parse-assign-expr)
-              pn (make-pyel-assign-node :type tt
-                                       :pos pos
-                                       :len (- (pyel-node-end right) pos)
-                                       :op-pos op-pos
-                                       :left left
-                                       :right right))
-        (when pyel-parse-ide-mode
-          (pyel-highlight-assign-targets pn left right)
-          (if (or (pyel-function-node-p right)
-                  (pyel-object-node-p right))
-              (pyel-record-imenu-functions right left)))
-        ;; do this last so ide checks above can use absolute positions
-        (pyel-node-add-children pn left right))
-      pn)))
+    (when (memq tt pyel-assignments)
+      (setq left pn
+            right (pyel-parse-assign-expr (pyel-peek-token))
+            pn (make-pyel-assign-node :type tt
+                                      :pos pos
+                                      :left left
+                                      :right right))
+      ;; do this last so ide checks above can use absolute positions
+      (pyel-node-add-children pn left right))
+    pn))
 
 (defsubst pyel-wrap-with-expr-stmt (pos expr &optional add-child)
   (let ((pn (make-pyel-expr-stmt-node :pos pos
@@ -654,29 +702,27 @@ Also return the start and end position of the token."
     pn))
 
 
-(defun pyel-parse-name ()
-  "Parser for identifier or label.  Last token matched must be pyel-NAME.
+(defun pyel-parse-name (token)
+  "Parser for identifier.  Last token matched must be pyel-NAME.
 Called when we found a name in a statement context.  If it's a label, we gather
 up any following labels and the next non-label statement into a
 `pyel-labeled-stmt-node' bundle and return that.  Otherwise we parse an
 expression and return it wrapped in a `pyel-expr-stmt-node'."
-  (let ((pos pyel-token-beg)
-        (end pyel-token-end)
-        expr
+  (let (expr
         stmt
         pn
         bundle
         (continue t))
     ;; set check for label and call down to `pyel-parse-primary-expr'
-    (setq expr (pyel-parse-expr))
-    (setq pn (pyel-wrap-with-expr-stmt pos expr t))))
+    (setq expr (pyel-parse-expr token))
+    (setq pn (pyel-wrap-with-expr-stmt (plist-get token :start) expr t))))
 
 (defconst pyel-parsers
   (let ((parsers (make-hash-table))
         (tokens
          (list
-          (cons 'pyel-EXPR #'pyel-parse-expr-stmt)
-          (cons 'pyel-NAME #'pyel-parse-name)
+          (cons 'EXPR #'pyel-parse-expr-stmt)
+          (cons 'NAME #'pyel-parse-name)
           )))
     (loop for (k . v) in tokens do
           (puthash k v parsers))
@@ -688,7 +734,7 @@ expression and return it wrapped in a `pyel-expr-stmt-node'."
   (let* ((tt (plist-get first-token :token))
          (first-tt first-token)
          (beg pyel-token-beg)
-         (parser (if (eq tt 'pyel-ERROR)
+         (parser (if (eq tt 'ERROR)
                      #'pyel-parse-semi
                    (gethash tt pyel-parsers)))
          pn
@@ -697,9 +743,9 @@ expression and return it wrapped in a `pyel-expr-stmt-node'."
     (and pyel-labeled-stmt
          (pyel-labeled-stmt-node-stmt pyel-labeled-stmt)
          (setq pyel-labeled-stmt nil))
-    (setq pn (funcall parser))
+    (setq pn (funcall parser first-token))
     ;; Don't do auto semi insertion for certain statement types.
-    (unless (or (memq first-tt pyel-no-semi-insertion)
+    (unless (or (memq (plist-get first-token :token) pyel-no-semi-insertion)
                 (pyel-labeled-stmt-node-p pn))
       (pyel-auto-insert-semicolon pn))
     pn))
@@ -714,12 +760,6 @@ expression and return it wrapped in a `pyel-expr-stmt-node'."
          (input-pending-p)
          (throw 'interrupted t))
     (setq pn (pyel-statement-helper first-token))
-    ;; no-side-effects warning check
-    (unless (pyel-node-has-side-effects pn)
-      (setq end (pyel-node-end pn))
-      (save-excursion
-        (goto-char end)
-        (setq beg (max (pyel-node-pos pn) (point-at-bol)))))
     pn))
 
 
@@ -750,15 +790,23 @@ the token is flagged as such.
 
 Note that this function always returned the un-flagged token!
 The flags, if any, are saved in `pyel-current-flagged-token'."
-  (if (not (eq pyel-current-flagged-token 'pyel-EOF)) ; last token not consumed
-      pyel-current-token ; most common case - return already-peeked token
-    (let* ((token (pyel-get-token))     ; call scanner
-           (tt (plist-get token :token)))
-      ;; eat comments
-      (while (eq tt 'pyel-COMMENT)
-        (setq token (pyel-get-token))
-        (setq tt (plist-get token :token)))
-      token)))
+  (let ((start-of-line-p (eq (current-column) 0)))
+    (when start-of-line-p
+      ;; if at the start of a line then eat the whitespace and record
+      ;; the indent (scope).
+      (princ "at the start of line"))
+    ;; skip whitespos that isn't at the start of a line
+    (while (memq (char-after) (list ?\s ?\t))
+      (forward-char))
+    (if (eq (point) (point-max))
+        (list :token 'pyel-EOF)         ; at the end of file so exit
+      (let* ((token (pyel-get-token))   ; call scanner
+             (tt (plist-get token :token)))
+        ;; eat comments
+        (while (eq tt 'pyel-COMMENT)
+          (setq token (pyel-get-token))
+          (setq tt (plist-get token :token)))
+        token))))
 
 (defun pyel-do-parse ()
   "Parse current buffer starting from current point.
@@ -824,7 +872,7 @@ buffer will only rebuild its `pyel-ast' if the buffer is dirty."
         (end (point-max)))
     (save-excursion
       (dolist (o (overlays-in beg end))
-        (when (overlay-get o 'pyel-error)
+        (when (overlay-get o 'error)
           (delete-overlay o))))))
 
 (provide 'pyel)
