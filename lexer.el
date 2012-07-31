@@ -201,8 +201,10 @@ if the base isn't recognised."
     (?b 2)
     (t (if (or (pyel-number-p c) (eq c ?.))
            10
-         (signal 'unsupported-base (format "Unsuppoted Base: %s." c))))))
+         (signal 'scan-error
+                 (list (format "Unsupported base: %s." (char-to-string c))))))))
 
+;; TODO the handling of complex numbers needs to be improved.
 (defun pyel-lex-number ()
   "Parse a number token from the current point of the lexer.
 Numbers start with a digit but may contain a second character
@@ -212,18 +214,72 @@ which can be either o (Octal) an x (Hexadecimal) or b (Binary)."
     (let* ((node (list :beg (pyel-point)))
            (base (condition-case err
                      (pyel-convert-name-to-base (pyel-char-peek))
-                   (unsuppoted-base
-                    (plist-put node :error (cdr err))
+                   (scan-error
+                    (plist-put node :error (cadr err))
                     10))))
-      (when (not (eq base 10)) (pyel-forward-char 2)) ; skip base char
-      (let ((value-pos (pyel-point)))
-        (while (not (pyel-whitespace-p (pyel-char-after)))
-          (pyel-forward-char))
-        (plist-put node :value (string-to-number (bsnp value-pos (pyel-point)) base))
+       ;; If there is a base char then skip it.
+      (when (or (plist-get node :error) (not (eq base 10)))
+        (pyel-forward-char 2))
+      (let ((value-pos (pyel-point))
+            passed-dot-p
+            passed-ell-p
+            passed-exponent-p
+            passed-complex-p)
+        ;; Keep going forward until we hit a char that isn't a number.
+        (while  (pyel-number-p (pyel-char-after))
+          (pyel-forward-char)
+          (let ((current-char (pyel-char-after)))
+            (cond
+             ;; Handle exponents.
+             ((memq current-char '(?e ?E))
+              (progn
+                (when passed-exponent-p
+                  (plist-put node :error "Invalid syntax, number can't have more than one exponent."))
+                (setq passed-exponent-p t)
+                (pyel-forward-char)     ; skip the exponent.
+                (when (eq (pyel-char-after) ?-)
+                  (pyel-forward-char)))) ; skip the - if after an exponent.
+
+             ;; Handle decimal points.
+             ((eq current-char ?.)
+              (when passed-dot-p
+                (plist-put node :error "Invalid syntax, number can't contain more than one decimal point."))
+              (setq passed-dot-p t)
+              (pyel-forward-char))
+
+             ;; Handle Long integer.
+             ((memq current-char '(?l ?L))
+              (when passed-ell-p
+                (plist-put node :error "Invalid syntax, number can't contain more than one long modifier."))
+              (setq passed-ell-p t)
+              (pyel-forward-char))
+
+             ;; Handle Long integer.
+             ((memq current-char '(?j ?J))
+              (when passed-ell-p
+                (plist-put node :error "Invalid syntax, number can't contain more than one complex part."))
+              (setq passed-ell-p t)
+              (pyel-forward-char)))))
+        ;; Don't try and parse the number if there has already been an
+        ;; error or if it's a long int.
+        (if (or passed-ell-p (plist-get node :error))
+            (plist-put node :value (bsnp (plist-get node :beg) (pyel-point)))
+          (plist-put node :value (string-to-number (bsnp value-pos (pyel-point)) base)))
         (plist-put node :len (- (pyel-point) (plist-get node :beg)))
         (plist-put node :base base)
-        (plist-put node :type 'NUMBER)))))
+        (plist-put node :type 'NUMBER)
+        node))))
 
 (defun pyel-lex-operator ()
   "Parse a operator from the current point of the lexer."
-  )
+  (flet ((bsnp (start end)
+               (buffer-substring-no-properties start end)))
+    (let* ((start-pos (pyel-point))
+           (token (progn (while (pyel-identifier-part-p (pyel-char-after))
+                           (pyel-forward-char))
+                         (list :value (bsnp start-pos (pyel-point))
+                               :beg start-pos
+                               :len (- (pyel-point) start-pos)))))
+      (aif (pyel-string-to-keyword (plist-get token :value))
+        (plist-put token :type it)
+        (plist-put token :type 'NAME)))))
