@@ -29,7 +29,7 @@
     (goto-char (point-min))
     (let ((*pyel-lex* (make-pyel-lexer)))
       (should (equal (pyel-lex-name)
-                     (list :str "temp" :beg 1 :end 5 :type 'NAME))))))
+                     (list :value "temp" :beg 1 :len 4 :type 'NAME))))))
 
 (ert-deftest pyel-lex-name-test1 ()
   (with-temp-buffer
@@ -37,7 +37,7 @@
     (goto-char (point-min))
     (let ((*pyel-lex* (make-pyel-lexer)))
       (should (equal (pyel-lex-name)
-                     (list :str "def" :beg 1 :end 4 :type 'NAME))))))
+                     (list :value "def" :beg 1 :len 3 :type 'DEF))))))
 
 (ert-deftest pyel-lex-number-test ()
   (with-temp-buffer
@@ -45,7 +45,7 @@
     (goto-char (point-min))
     (let ((*pyel-lex* (make-pyel-lexer)))
       (should (equal (pyel-lex-number)
-                     (list :str "192912" :beg 1 :end 7 :type 'NUMBER))))))
+                     (list :value 192912 :beg 1 :len 6 :base 10 :type 'NUMBER))))))
 
 (ert-deftest pyel-lex-number-hex ()
   (with-temp-buffer
@@ -53,7 +53,7 @@
     (goto-char (point-min))
     (let ((*pyel-lex* (make-pyel-lexer)))
       (should (equal (pyel-lex-number)
-                     (list :str "0x1234" :beg 1 :end 7 :type 'NUMBER))))))
+                     (list :value 4660 :beg 1 :len 6 :base 16 :type 'NUMBER))))))
 
 (ert-deftest pyel-lex-number-oct ()
   (with-temp-buffer
@@ -61,7 +61,7 @@
     (goto-char (point-min))
     (let ((*pyel-lex* (make-pyel-lexer)))
       (should (equal (pyel-lex-number)
-                     (list :str "0o4321" :beg 1 :end 7 :type 'NUMBER))))))
+                     (list :value 2257 :beg 1 :len 6 :base 8 :type 'NUMBER))))))
 
 (ert-deftest pyel-lex-number-bin ()
   (with-temp-buffer
@@ -69,4 +69,12 @@
     (goto-char (point-min))
     (let ((*pyel-lex* (make-pyel-lexer)))
       (should (equal (pyel-lex-number)
-                     (list :str "0b10101" :beg 1 :end 8 :type 'NUMBER))))))
+                     (list :value 21 :beg 1 :len 7 :base 2 :type 'NUMBER))))))
+
+(ert-deftest pyel-lex-number-exponant ()
+  (with-temp-buffer
+    (insert "1.0000050000069649e-05\n")
+    (goto-char (point-min))
+    (let ((*pyel-lex* (make-pyel-lexer)))
+      (should (equal (pyel-lex-number)
+                     (list :value 1.0000050000069649e-05 :beg 1 :len 22 :base 10 :type 'NUMBER))))))

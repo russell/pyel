@@ -94,16 +94,88 @@ the name is made up of characters or numbers."
    (pyel-char-lowercase-p c)
    (pyel-number-p c)))
 
+;;
+;; Keyword Handling.
+;;
+
+(defconst pyel-keywords
+  '(break
+    __debug__
+    as assert
+    break
+    def
+    class continue
+    else elif except
+    finally for
+    global
+    if in import
+    lambda
+    None
+    pass
+    raise return
+    try
+    while with
+    yield))
+
+(defconst pyel-keyword-names
+  (let ((table (make-hash-table :test 'equal)))
+    (loop for k in pyel-keywords
+          do (puthash
+              (symbol-name k)           ; "return"
+              (intern (upcase (symbol-name k)))                         ; (quote return)
+              table))
+    table)
+  "Python keywords by name, mapped to their symbols.")
+
+;;
+;; Reserved words
+;;
+
+(defconst pyel-reserved-words
+  '(Ellipsis
+    False None NotImplemented True
+    __debug__ copyright credits
+    exit license quit))
+
+(defconst pyel-reserved-word-names
+  (let ((table (make-hash-table :test 'equal)))
+    (loop for k in pyel-reserved-words
+          do (puthash
+              (symbol-name k)
+              'RESERVED
+              table))
+    table)
+  "Python reserved words by name, mapped to 'RESERVED.")
+
+(defun pyel-string-to-keyword (s)
+  "Return token for S, a string, if S is a keyword or reserved word.
+Returns a symbol such as 'pyel-BREAK, or nil if not keyword/reserved."
+  (or (gethash s pyel-keyword-names)
+      (gethash s pyel-reserved-word-names)))
+
+
+
 ;; Format of AST nodes,
 ;;
 ;; Each node will be a list, it will need to know it's absolute
 ;; location and length.  Any issues parsing the node will also be
 ;; stored on it.  The type will store the node type.
 
+;; Generic type:
+;;
 ;; (list :type TYPE
-;;       :beg 0
-;;       :length 5
-;;       :value
+;;       :beg 1
+;;       :length 7
+;;       :value banana
+;;       :error "")
+
+;; Number type:
+;;
+;; (list :type NUMBER
+;;       :beg 1
+;;       :length 4
+;;       :base 10
+;;       :value 1234
 ;;       :error "")
 
 (defun pyel-lex-name ()
@@ -113,16 +185,23 @@ the name is made up of characters or numbers."
     (let* ((start-pos (pyel-point))
            (token (progn (while (pyel-identifier-part-p (pyel-char-after))
                            (pyel-forward-char))
-                         (list :str (bsnp start-pos (pyel-point))
+                         (list :value (bsnp start-pos (pyel-point))
                                :beg start-pos
-                               :end (pyel-point)))))
-      ;; XXX should also detect other keywords like def, while
-      (aif (pyel-string-to-keyword (plist-get token :str))
-        (if (eq it 'RESERVED)
-            (plist-put token :type (pyel-token-code it))
-          (plist-put token :type 'NAME))
+                               :len (- (pyel-point) start-pos)))))
+      (aif (pyel-string-to-keyword (plist-get token :value))
+        (plist-put token :type it)
         (plist-put token :type 'NAME)))))
 
+(defun pyel-convert-name-to-base (c)
+  "Convert char to equivilant base.  Signals an 'unsupported-base
+if the base isn't recognised."
+  (case c
+    (?o 8)
+    (?x 16)
+    (?b 2)
+    (t (if (or (pyel-number-p c) (eq c ?.))
+           10
+         (signal 'unsupported-base (format "Unsuppoted Base: %s." c))))))
 
 (defun pyel-lex-number ()
   "Parse a number token from the current point of the lexer.
@@ -130,11 +209,21 @@ Numbers start with a digit but may contain a second character
 which can be either o (Octal) an x (Hexadecimal) or b (Binary)."
   (flet ((bsnp (start end)
                (buffer-substring-no-properties start end)))
-    (let* ((start-pos (pyel-point))
-           (base (memq (pyel-char-peek) '(?o ?x ?b)))) ;; XXX Can be removed and put into the parser.
-      (while (not (pyel-whitespace-p (pyel-char-after)))
-        (pyel-forward-char))
-      (list :str (bsnp start-pos (pyel-point))
-            :beg start-pos
-            :end (pyel-point)
-            :type 'NUMBER))))
+    (let* ((node (list :beg (pyel-point)))
+           (base (condition-case err
+                     (pyel-convert-name-to-base (pyel-char-peek))
+                   (unsuppoted-base
+                    (plist-put node :error (cdr err))
+                    10))))
+      (when (not (eq base 10)) (pyel-forward-char 2)) ; skip base char
+      (let ((value-pos (pyel-point)))
+        (while (not (pyel-whitespace-p (pyel-char-after)))
+          (pyel-forward-char))
+        (plist-put node :value (string-to-number (bsnp value-pos (pyel-point)) base))
+        (plist-put node :len (- (pyel-point) (plist-get node :beg)))
+        (plist-put node :base base)
+        (plist-put node :type 'NUMBER)))))
+
+(defun pyel-lex-operator ()
+  "Parse a operator from the current point of the lexer."
+  )
