@@ -110,7 +110,7 @@
     (goto-char (point-min))
     (let ((*pyel-lex* (make-pyel-lexer)))
       (should (pyel-plist-equal (pyel-lex-number)
-                     (list :value 12381 :beg 1 :len 6 :base 10 :type 'NUMBER))))))
+                     (list :value "12381L" :beg 1 :len 6 :base 10 :type 'NUMBER))))))
 
 (ert-deftest pyel-lex-complex-number-test ()
   (with-temp-buffer
