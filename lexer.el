@@ -197,8 +197,11 @@ Returns a symbol such as 'pyel-BREAK, or nil if not keyword/reserved."
 if the base isn't recognised."
   (case c
     (?o 8)
+    (?O 8)
     (?x 16)
+    (?X 16)
     (?b 2)
+    (?B 2)
     (t (if (or (pyel-number-p c) (eq c ?.))
            10
          (signal 'scan-error
