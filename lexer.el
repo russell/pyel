@@ -33,6 +33,15 @@ branches."
   `(let ((it ,test))
      (when it ,if-expr)))
 
+(defmacro aif (test if-expr &optional else-expr)
+  "An anaphoric variant of (if ...). The value of the test
+expression is locally bound to 'it' during execution of the
+consequent clauses. The binding is present in both consequent
+branches."
+  (declare (indent 1))
+  `(let ((it ,test))
+     (if it ,if-expr ,else-expr)))
+
 (defstruct (pyel-lexer
             (:constructor nil)
             (:constructor make-pyel-lexer

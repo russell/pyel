@@ -32,90 +32,104 @@
             do (unless (equal (plist-get p1 k) (plist-get p2 k)) (throw 'break nil))))
     t))
 
-(ert-deftest pyel-lex-name-test ()
-  (with-temp-buffer
-    (insert "temp = bananan\n")
-    (goto-char (point-min))
-    (let ((*pyel-lex* (make-pyel-lexer)))
-      (should (equal (pyel-lex-name)
-                     (list :value "temp" :beg 1 :len 4 :type 'NAME))))))
+(defun pyel-should-equal-alist (a b)
+  (should (pyel-plist-equal a b)))
 
-(ert-deftest pyel-lex-name-test1 ()
-  (with-temp-buffer
-    (insert "def test():\n    pass\n")
-    (goto-char (point-min))
-    (let ((*pyel-lex* (make-pyel-lexer)))
-      (should (equal (pyel-lex-name)
-                     (list :value "def" :beg 1 :len 3 :type 'DEF))))))
+(defmacro pyel-simple-test-case (name doc test-data test)
+  (declare (indent 2))
+  `(ert-deftest ,name ()
+     ,doc
+     (with-temp-buffer
+       (insert ,test-data)
+       (goto-char (point-min))
+       (let ((*pyel-lex* (make-pyel-lexer)))
+         (should ,test)))))
 
-(ert-deftest pyel-lex-number-test ()
-  (with-temp-buffer
-    (insert "192912\n")
-    (goto-char (point-min))
-    (let ((*pyel-lex* (make-pyel-lexer)))
-      (should (pyel-plist-equal (pyel-lex-number)
-                     (list :value 192912 :beg 1 :len 6 :base 10 :type 'NUMBER))))))
+(pyel-simple-test-case pyel-lex-name-test
+    "Test that a simple name can be parsed."
+  "temp = bananan\n"
+  (equal (pyel-lex-name)
+         (list :value "temp" :beg 1 :len 4 :type 'NAME)))
 
-(ert-deftest pyel-lex-invalid-number-test ()
-  (with-temp-buffer
-    (insert "192912[\"banana\"]\n")
-    (goto-char (point-min))
-    (let ((*pyel-lex* (make-pyel-lexer)))
-      (should (pyel-plist-equal (pyel-lex-number)
-                     (list :value 192912 :beg 1 :len 6 :base 10 :type 'NUMBER))))))
+(ert-deftest pyel-lex-name-test-separator ()
+  "Test all the possible operator separators."
+  (dolist (separator
+           (list  "(" ")" "[" "]" "{" "}" "@" "," ":" "." "`" "=" ";" "+=" "-=" "*=" "/=" "//=" "%=" "&=" "|=" "^=" ">>=" "<<=" "**=" "'" "\"" "#" "\\" "\$" "\?"))
+    (with-temp-buffer
+      (insert "test123e")
+      (insert separator)
+      (goto-char (point-min))
+      (let ((*pyel-lex* (make-pyel-lexer)))
+        (should
+         (equal (pyel-lex-name)
+                (list :value "test123e" :beg 1 :len 8 :type 'NAME)))))))
 
-(ert-deftest pyel-lex-number-hex ()
-  (with-temp-buffer
-    (insert "0x1234\n")
-    (goto-char (point-min))
-    (let ((*pyel-lex* (make-pyel-lexer)))
-      (should (pyel-plist-equal (pyel-lex-number)
-                     (list :value 4660 :beg 1 :len 6 :base 16 :type 'NUMBER))))))
 
-(ert-deftest pyel-lex-number-oct ()
-  (with-temp-buffer
-    (insert "0o4321\n")
-    (goto-char (point-min))
-    (let ((*pyel-lex* (make-pyel-lexer)))
-      (should (pyel-plist-equal (pyel-lex-number)
-                     (list :value 2257 :beg 1 :len 6 :base 8 :type 'NUMBER))))))
+(pyel-simple-test-case pyel-lex-name-test1
+    ")"
+  "def test():\n    pass\n"
+  (should (equal (pyel-lex-name)
+                 (list :value "def" :beg 1 :len 3 :type 'DEF))))
 
-(ert-deftest pyel-lex-number-bin ()
-  (with-temp-buffer
-    (insert "0b10101\n")
-    (goto-char (point-min))
-    (let ((*pyel-lex* (make-pyel-lexer)))
-      (should (pyel-plist-equal (pyel-lex-number)
-                     (list :value 21 :beg 1 :len 7 :base 2 :type 'NUMBER))))))
+(pyel-simple-test-case pyel-lex-number-test
+    ""
+  "192912\n"
+  (pyel-should-equal-alist
+   (pyel-lex-number)
+   (list :value 192912 :beg 1 :len 6 :base 10 :type 'NUMBER)))
 
-(ert-deftest pyel-lex-number-exponant ()
-  (with-temp-buffer
-    (insert "1.0000050000069649e-05\n")
-    (goto-char (point-min))
-    (let ((*pyel-lex* (make-pyel-lexer)))
-      (should (pyel-plist-equal (pyel-lex-number)
-                     (list :value 1.0000050000069649e-05 :beg 1 :len 22 :base 10 :type 'NUMBER))))))
+(pyel-simple-test-case pyel-lex-invalid-number-test
+    ""
+  "192912[\"banana\"]\n"
+  (pyel-should-equal-alist
+   (pyel-lex-number)
+   (list :value 192912 :beg 1 :len 6 :base 10 :type 'NUMBER)))
 
-(ert-deftest pyel-lex-number-invalid-base ()
-  (with-temp-buffer
-    (insert "1f1000\n")
-    (goto-char (point-min))
-    (let ((*pyel-lex* (make-pyel-lexer)))
-      (should (pyel-plist-equal (pyel-lex-number)
-                     (list :value "1f1000" :error "Unsupported base: f." :beg 1 :len 6 :base 10 :type 'NUMBER))))))
+(pyel-simple-test-case pyel-lex-number-hex
+    ""
+  "0x1234\n"
+  (pyel-should-equal-alist
+   (pyel-lex-number)
+   (list :value 4660 :beg 1 :len 6 :base 16 :type 'NUMBER)))
 
-(ert-deftest pyel-lex-number-long-test ()
-  (with-temp-buffer
-    (insert "12381L\n")
-    (goto-char (point-min))
-    (let ((*pyel-lex* (make-pyel-lexer)))
-      (should (pyel-plist-equal (pyel-lex-number)
-                     (list :value "12381L" :beg 1 :len 6 :base 10 :type 'NUMBER))))))
+(pyel-simple-test-case pyel-lex-number-oct
+    ""
+  "0o4321\n"
+  (pyel-should-equal-alist
+   (pyel-lex-number)
+   (list :value 2257 :beg 1 :len 6 :base 8 :type 'NUMBER)))
 
-(ert-deftest pyel-lex-complex-number-test ()
-  (with-temp-buffer
-    (insert "12381j\n")
-    (goto-char (point-min))
-    (let ((*pyel-lex* (make-pyel-lexer)))
-      (should (pyel-plist-equal (pyel-lex-number)
-                     (list :value 12381 :beg 1 :len 6 :base 10 :type 'NUMBER))))))
+(pyel-simple-test-case pyel-lex-number-bin
+    ""
+  "0b10101\n"
+  (pyel-should-equal-alist
+   (pyel-lex-number)
+   (list :value 21 :beg 1 :len 7 :base 2 :type 'NUMBER)))
+
+(pyel-simple-test-case pyel-lex-number-exponant
+    ""
+  "1.0000050000069649e-05\n"
+  (pyel-should-equal-alist
+   (pyel-lex-number)
+   (list :value 1.0000050000069649e-05 :beg 1 :len 22 :base 10 :type 'NUMBER)))
+
+(pyel-simple-test-case pyel-lex-number-invalid-base
+    ""
+  "1f1000\n"
+  (pyel-should-equal-alist
+   (pyel-lex-number)
+   (list :value "1f1000" :error "Unsupported base: f." :beg 1 :len 6 :base 10 :type 'NUMBER)))
+
+(pyel-simple-test-case pyel-lex-number-long-test
+    ""
+  "12381L\n"
+  (pyel-should-equal-alist
+   (pyel-lex-number)
+   (list :value "12381L" :beg 1 :len 6 :base 10 :type 'NUMBER)))
+
+(pyel-simple-test-case pyel-lex-complex-number-test
+    ""
+  "12381j\n"
+  (pyel-should-equal-alist
+   (pyel-lex-number)
+   (list :value "12381j" :beg 1 :len 6 :base 10 :type 'NUMBER)))
