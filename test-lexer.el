@@ -54,7 +54,9 @@
 (ert-deftest pyel-lex-name-test-separator ()
   "Test all the possible operator separators."
   (dolist (separator
-           (list  "(" ")" "[" "]" "{" "}" "@" "," ":" "." "`" "=" ";" "+=" "-=" "*=" "/=" "//=" "%=" "&=" "|=" "^=" ">>=" "<<=" "**=" "'" "\"" "#" "\\" "\$" "\?"))
+           (list "(" ")" "[" "]" "{" "}" "@" "," ":" "." "`" "="
+                 ";" "+=" "-=" "*=" "/=" "//=" "%=" "&=" "|=" "^="
+                 ">>=" "<<=" "**=" "'" "\"" "#" "\\" "\$" "\?"))
     (with-temp-buffer
       (insert "test123e")
       (insert separator)
