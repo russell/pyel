@@ -66,69 +66,69 @@
 
 
 (pyel-simple-test-case pyel-lex-name-test1
-    ")"
+    "Check for parsing of special types."
   "def test():\n    pass\n"
   (should (equal (pyel-lex-name)
                  (list :value "def" :beg 1 :len 3 :type 'DEF))))
 
 (pyel-simple-test-case pyel-lex-number-test
-    ""
+    "Check that basic number parsing works."
   "192912\n"
   (pyel-should-equal-alist
    (pyel-lex-number)
    (list :value 192912 :beg 1 :len 6 :base 10 :type 'NUMBER)))
 
 (pyel-simple-test-case pyel-lex-invalid-number-test
-    ""
+    "Check that separator is honoured."
   "192912[\"banana\"]\n"
   (pyel-should-equal-alist
    (pyel-lex-number)
    (list :value 192912 :beg 1 :len 6 :base 10 :type 'NUMBER)))
 
 (pyel-simple-test-case pyel-lex-number-hex
-    ""
+    "Test parsing a hex number."
   "0x1234\n"
   (pyel-should-equal-alist
    (pyel-lex-number)
    (list :value 4660 :beg 1 :len 6 :base 16 :type 'NUMBER)))
 
 (pyel-simple-test-case pyel-lex-number-oct
-    ""
+    "Test parsing a octal number."
   "0o4321\n"
   (pyel-should-equal-alist
    (pyel-lex-number)
    (list :value 2257 :beg 1 :len 6 :base 8 :type 'NUMBER)))
 
 (pyel-simple-test-case pyel-lex-number-bin
-    ""
+    "Test parsing a binary number."
   "0b10101\n"
   (pyel-should-equal-alist
    (pyel-lex-number)
    (list :value 21 :beg 1 :len 7 :base 2 :type 'NUMBER)))
 
 (pyel-simple-test-case pyel-lex-number-exponant
-    ""
+    "Test parsing an exponential number."
   "1.0000050000069649e-05\n"
   (pyel-should-equal-alist
    (pyel-lex-number)
    (list :value 1.0000050000069649e-05 :beg 1 :len 22 :base 10 :type 'NUMBER)))
 
 (pyel-simple-test-case pyel-lex-number-invalid-base
-    ""
+    "Test parsing and invalid based number."
   "1f1000\n"
   (pyel-should-equal-alist
    (pyel-lex-number)
    (list :value "1f1000" :error "Unsupported base: f." :beg 1 :len 6 :base 10 :type 'NUMBER)))
 
 (pyel-simple-test-case pyel-lex-number-long-test
-    ""
+    "Test parsing a long integer."
   "12381L\n"
   (pyel-should-equal-alist
    (pyel-lex-number)
    (list :value "12381L" :beg 1 :len 6 :base 10 :type 'NUMBER)))
 
 (pyel-simple-test-case pyel-lex-complex-number-test
-    ""
+    "Test parsing a complex number."
   "12381j\n"
   (pyel-should-equal-alist
    (pyel-lex-number)
