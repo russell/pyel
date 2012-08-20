@@ -62,16 +62,17 @@
       (insert separator)
       (goto-char (point-min))
       (let ((*pyel-lex* (make-pyel-lexer)))
-        (should
-         (equal (pyel-lex-name)
-                (list :value "test123e" :beg 1 :len 8 :type 'NAME)))))))
+        (pyel-should-equal-alist
+         (pyel-lex-name)
+         (list :value "test123e" :beg 1 :len 8 :type 'NAME))))))
 
 
 (pyel-simple-test-case pyel-lex-name-test1
     "Check for parsing of special types."
   "def test():\n    pass\n"
-  (should (equal (pyel-lex-name)
-                 (list :value "def" :beg 1 :len 3 :type 'DEF))))
+  (pyel-should-equal-alist
+   (pyel-lex-name)
+   (list :value "def" :beg 1 :len 3 :type 'DEF)))
 
 (pyel-simple-test-case pyel-lex-number-test
     "Check that basic number parsing works."
@@ -87,12 +88,44 @@
    (pyel-lex-number)
    (list :value 192912 :beg 1 :len 6 :base 10 :type 'NUMBER)))
 
+(ert-deftest pyel-lex-number-test-separator ()
+  "Test all the possible operator separators with a number."
+  (dolist (separator
+           (list "(" ")" "[" "]" "{" "}" "@" "," ":" "`" "="
+                 ";" "+=" "-=" "*=" "/=" "//=" "%=" "&=" "|=" "^="
+                 ">>=" "<<=" "**=" "'" "\"" "#" "\\" "\$" "\?"))
+    (with-temp-buffer
+      (insert "192912")
+      (insert separator)
+      (insert "\n")
+      (goto-char (point-min))
+      (let* ((*pyel-lex* (make-pyel-lexer))
+             (result (pyel-lex-number)))
+        (should
+         (equal result
+                (list :beg 1 :value 192912 :len 6 :base 10 :type 'NUMBER)))))))
+
 (pyel-simple-test-case pyel-lex-number-hex
     "Test parsing a hex number."
   "0x1234\n"
   (pyel-should-equal-alist
    (pyel-lex-number)
    (list :value 4660 :beg 1 :len 6 :base 16 :type 'NUMBER)))
+
+(pyel-simple-test-case pyel-lex-number-invalid-decimal
+    "Test parsing a number with a broken decimal."
+  "1234.\n"
+  (pyel-should-equal-alist
+   (pyel-lex-number)
+   (list :value 1234 :error "Invalid decimal point." :beg 1 :len 5 :base 10 :type 'NUMBER)))
+
+(pyel-simple-test-case pyel-lex-number-invalid-decimal1
+    "Test parsing a binary number with a decimal point."
+  "0b101.01\n"
+  (pyel-should-equal-alist
+   (pyel-lex-number)
+   (list :value "0b101.01" :beg 1 :len 8 :base 2 :type 'NUMBER
+         :error "Invalid syntax, decimal point within non base 10 number.")))
 
 (pyel-simple-test-case pyel-lex-number-oct
     "Test parsing a octal number."

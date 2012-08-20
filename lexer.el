@@ -228,59 +228,72 @@ which can be either o (Octal) an x (Hexadecimal) or b (Binary)."
                      (pyel-convert-name-to-base (pyel-char-peek))
                    (scan-error
                     (plist-put node :error (cadr err))
-                    10))))
-       ;; If there is a base char then skip it.
-      (when (or (plist-get node :error) (not (eq base 10)))
-        (pyel-forward-char 2))
-      (let ((value-pos (pyel-point))
-            passed-dot-p
-            passed-ell-p
-            passed-exponent-p
-            passed-complex-p)
-        ;; Keep going forward until we hit a char that isn't a number.
-        (while  (pyel-number-p (pyel-char-after))
-          (pyel-forward-char)
-          (let ((current-char (pyel-char-after)))
-            (cond
-             ;; Handle exponents.
-             ((memq current-char '(?e ?E))
-              (progn
-                (when passed-exponent-p
-                  (plist-put node :error "Invalid syntax, number can't have more than one exponent."))
-                (setq passed-exponent-p t)
-                (pyel-forward-char)     ; skip the exponent.
-                (when (eq (pyel-char-after) ?-)
-                  (pyel-forward-char)))) ; skip the - if after an exponent.
+                    10)))
+           (base-char (+ ?0 base)))
+      (flet ((pyel-valid-number-p (c)
+                                  (and (>= c ?0) (< c base-char))))
+        ;; If there is a base char then skip it.
+        (when (or (plist-get node :error) (not (eq base 10)))
+          (pyel-forward-char 2))
+        (let ((value-pos (pyel-point))
+              passed-dot-p
+              passed-ell-p
+              passed-exponent-p
+              passed-complex-p)
+          ;; Keep going forward until we hit a char that isn't a number.
 
-             ;; Handle decimal points.
-             ((eq current-char ?.)
-              (when passed-dot-p
-                (plist-put node :error "Invalid syntax, number can't contain more than one decimal point."))
-              (setq passed-dot-p t)
-              (pyel-forward-char))
+          ;; TODO This should be changed to stop when it hits a
+          ;; delimiter.  Currently there will be problems with really
+          ;; badly formed numbers.
+          (while  (pyel-number-p (pyel-char-after))
+            (pyel-forward-char)
+            (let ((current-char (pyel-char-after)))
+              (cond
+               ;; Handle exponents.
+               ((memq current-char '(?e ?E))
+                (progn
+                  (when passed-exponent-p
+                    (plist-put node :error "Invalid syntax, number can't have more than one exponent."))
+                  (setq passed-exponent-p t)
+                  (pyel-forward-char)     ; skip the exponent.
+                  (when (eq (pyel-char-after) ?-)
+                    (pyel-forward-char)))) ; skip the - if after an exponent.
 
-             ;; Handle Long integer.
-             ((memq current-char '(?l ?L))
-              (when passed-ell-p
-                (plist-put node :error "Invalid syntax, number can't contain more than one long modifier."))
-              (setq passed-ell-p t)
-              (pyel-forward-char))
+               ;; Handle decimal points.
+               ((eq current-char ?.)
+                (when passed-dot-p
+                  (plist-put node :error "Invalid syntax, number can't contain more than one decimal point."))
+                (unless (pyel-number-p (pyel-char-peek))
+                  (plist-put node :error "Invalid syntax, number with a decimal point."))
+                (unless (eq base 10)
+                  (plist-put node :error "Invalid syntax, decimal point within non base 10 number."))
+                (setq passed-dot-p t)
+                (pyel-forward-char))
 
-             ;; Handle Long integer.
-             ((memq current-char '(?j ?J))
-              (when passed-ell-p
-                (plist-put node :error "Invalid syntax, number can't contain more than one complex part."))
-              (setq passed-ell-p t)
-              (pyel-forward-char)))))
-        ;; Don't try and parse the number if there has already been an
-        ;; error or if it's a long int.
-        (if (or passed-ell-p (plist-get node :error))
-            (plist-put node :value (bsnp (plist-get node :beg) (pyel-point)))
-          (plist-put node :value (string-to-number (bsnp value-pos (pyel-point)) base)))
-        (plist-put node :len (- (pyel-point) (plist-get node :beg)))
-        (plist-put node :base base)
-        (plist-put node :type 'NUMBER)
-        node))))
+               ;; Handle Long integer.
+               ((memq current-char '(?l ?L))
+                (when passed-ell-p
+                  (plist-put node :error "Invalid syntax, number can't contain more than one long modifier."))
+                (setq passed-ell-p t)
+                (pyel-forward-char))
+
+               ;; Handle Long integer.
+               ((memq current-char '(?j ?J))
+                (when passed-ell-p
+                  (plist-put node :error "Invalid syntax, number can't contain more than one complex part."))
+                (setq passed-ell-p t)
+                (pyel-forward-char)))))
+          ;; Don't try and parse the number if there has already been an
+          ;; error or if it's a long int.
+          (if (or passed-ell-p (plist-get node :error))
+              (plist-put node
+                         :value (bsnp (plist-get node :beg) (pyel-point)))
+            (plist-put node
+                       :value (string-to-number (bsnp value-pos (pyel-point)) base)))
+          (plist-put node :len (- (pyel-point) (plist-get node :beg)))
+          (plist-put node :base base)
+          (plist-put node :type 'NUMBER)
+          node)))))
 
 (defun pyel-lex-operator ()
   "Parse a operator from the current point of the lexer."
