@@ -29,7 +29,8 @@
           (keys2 (sort (loop for i in p2 by #'cddr collect i) #'string-lessp)))
       (unless (equal keys1 keys2) (throw 'break nil))
       (loop for k in keys1
-            do (unless (equal (plist-get p1 k) (plist-get p2 k)) (throw 'break nil))))
+            do (unless (equal (plist-get p1 k) (plist-get p2 k))
+                 (throw 'break nil))))
     t))
 
 (defun pyel-should-equal-alist (a b)
@@ -117,7 +118,8 @@
   "1234.\n"
   (pyel-should-equal-alist
    (pyel-lex-number)
-   (list :value 1234 :error "Invalid decimal point." :beg 1 :len 5 :base 10 :type 'NUMBER)))
+   (list :value 1234 :error "Invalid decimal point."
+         :beg 1 :len 5 :base 10 :type 'NUMBER)))
 
 (pyel-simple-test-case pyel-lex-number-invalid-decimal1
     "Test parsing a binary number with a decimal point."
@@ -146,14 +148,16 @@
   "1.0000050000069649e-05\n"
   (pyel-should-equal-alist
    (pyel-lex-number)
-   (list :value 1.0000050000069649e-05 :beg 1 :len 22 :base 10 :type 'NUMBER)))
+   (list :value 1.0000050000069649e-05 :beg 1
+         :len 22 :base 10 :type 'NUMBER)))
 
 (pyel-simple-test-case pyel-lex-number-invalid-base
     "Test parsing and invalid based number."
   "1f1000\n"
   (pyel-should-equal-alist
    (pyel-lex-number)
-   (list :value "1f1000" :error "Unsupported base: f." :beg 1 :len 6 :base 10 :type 'NUMBER)))
+   (list :value "1f1000" :error "Unsupported base: f."
+         :beg 1 :len 6 :base 10 :type 'NUMBER)))
 
 (pyel-simple-test-case pyel-lex-number-long-test
     "Test parsing a long integer."
